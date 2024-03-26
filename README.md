@@ -1,6 +1,4 @@
 # MandelbrotGenerator
-Generates a mandelbrot set on your hardware
-
 colorTesting.java - Test program made to test colors in Java
 
 Complex.java - Defining complex numbers (i) and methods for manipulating them. May have been borrowed from online ;)
