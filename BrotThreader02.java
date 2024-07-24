@@ -25,12 +25,16 @@ public class BrotThreader02 implements Runnable{
 	static double shiftX = -0.75;
 	static double shiftY = 0;
 	
-	//Color settings b&w = 0, full = 1, roygbiv = 2
+	//alters the color contrast by reducing/increasing color change per depth
 	static double reductionFactor = 1;
+	
+	//Color settings b&w = 0, full = 1, roygbiv = 2
 	static int colorMode = 0;
+
+	//max calculation iterations
 	static int maxDepth = 256;
 	
-	//Images per side (Square root of the number of threads started)
+	//Number of threads in use
 	static int threads = 4;
 	
 	//fileName
