@@ -11,12 +11,12 @@ This app, coded in Java, allows you to render images of the Mandelbrot set on yo
 
 ## Download instructions
 ### GUI
-Download "MandelbrotGUI.jar" from releases. Open up your command line, navigate to the file you downloaded, and type "java -jar MandelbrotGUI.jar" to execute it.
+Download "MandelbrotGeneratorGUI.jar" from releases. Open up your command line, navigate to the file you downloaded, and type "java -jar MandelbrotGeneratorGUI.jar" to execute it.
 
 Note: The GUI version is very basic. I'm just learning how to build GUIs, so the setting available are barebones, but functioning. For all features available, run the CLI version.
 
 ### CLI
-Download "MandelbrotCLI.jar" from releases. Open up your command line, navigate to the file you downloaded, and type "java -jar MandelbrotCLI.jar" to execute it.
+Download "MandelbrotGeneratorCLI.jar" from releases. Open up your command line, navigate to the file you downloaded, and type "java -jar MandelbrotGeneratorCLI.jar" to execute it.
 
 ## Classes
 - Gui.java - Contains all methods for the GUI, interfaces with MandelbrotGenerator.java. Compile with this as the main method to get the GUI version of this program!
