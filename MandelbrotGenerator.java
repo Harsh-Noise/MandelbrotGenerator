@@ -8,8 +8,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.InputMismatchException;
-import java.util.Scanner;
 import javax.imageio.ImageIO;
 
 interface ProgressListener {
@@ -18,8 +16,7 @@ interface ProgressListener {
 }
 
 public class MandelbrotGenerator implements Runnable {
-    //EDITABLE SETTINGS
-
+    //Default settings
     //Side length of the graph (units)
     static double graphSize = 2.5;
 
@@ -41,31 +38,22 @@ public class MandelbrotGenerator implements Runnable {
     //fileName
     static String fileName = "myMandelbrot";
 
-    //UNEDITABLE
-    //Subgraph and subimage size for each thread
-    static double subGraphSize;
-    static int subImageSize;
+    //Variables edited by the algorithm
+    //Subimage size for each thread
+    static int startPoint = 0;
+    static int endPoint = 0;
 
     //Counters for threads
-    static int imageNum = 0;
-    static volatile int finished = 0;
-
-    //Centerpoint of each sub-image
-    static double calcShiftX;
-    static double calcShiftY;
-
-    //x and y offsets for the final image
-    static int xOffset = 0;
-    static int yOffset = 0;
+    static volatile int threadsDone = 0;
+    static volatile int pixDone = 0;
 
     //shared buffered image
     static volatile BufferedImage img;
 
-    static int startPoint = 0;
-    static int endPoint = 0;
-    static volatile int threadsDone = 0;
-    static volatile int pixDone = 0;
+    //Detector for CLI use
     static boolean CLI = false;
+    
+    //Settings file name
     static String settingsFile = "mandelbrotSettings.dat";
 
     public MandelbrotGenerator() {
@@ -113,13 +101,14 @@ public class MandelbrotGenerator implements Runnable {
         for (timer = 0; timer < limit / reductionFactor; timer++) {
             z = new Complex(iterate(z, c));
             //Check if the complex number has exploded off to infinity by seeing if it is greater than 2.2 units away from the origin (an acceptable distance)
-            if (Math.sqrt(Math.pow(z.re(), 2) + Math.pow(z.im(), 2)) > 2.2) {
+            //if (Math.sqrt(Math.pow(z.re(), 2) + Math.pow(z.im(), 2)) > 2.2) {
+            if (Math.pow(z.re(), 2) + Math.pow(z.im(), 2) > 4.84) {
                 break;
             }
         }
         return ((int) (timer * reductionFactor));
     }
-
+    
     public static double pxToNumY(int px, double graphSize, int imageSize, double shiftY) {
         //This method converts a pixel on the y axis to its corresponding unit
         return ((((double) graphSize / imageSize) * px) - (graphSize / 2) - shiftY);
@@ -147,12 +136,12 @@ public class MandelbrotGenerator implements Runnable {
             }
             
             for (int y = 0; y < imageSize; y++) {
-
                 //get complex number represented by the pixel on the img
                 Complex c = new Complex(pxToNumX(x, graphSize, imageSize, shiftX), pxToNumY(y, graphSize, imageSize, shiftY));
 
                 //test if it explodes off to infinity, and use returned color to paint the pixel
                 img.setRGB(x, y, getColor(c).getRGB());
+                
                 pixDone += 1;
             }
         }
@@ -173,11 +162,11 @@ public class MandelbrotGenerator implements Runnable {
                 fileName = dis.readUTF();
                 System.out.println("Settings loaded.");
             } catch (IOException e) {
-                System.err.println("Error reading settings file: " + e.getMessage());
+                System.err.println("[!!!] Error reading settings file: " + e.getMessage());
             }
         } else {
             // File does not exist, so initialize with default data
-            System.out.println("Settings file not found. Initialized with default values.");
+            System.out.println("[???] Settings file not found. Initialized with default values.");
             saveSettings();
         }
     }
@@ -195,15 +184,15 @@ public class MandelbrotGenerator implements Runnable {
             dos.writeUTF(fileName);
             System.out.println("Settings saved.");
         } catch (IOException e) {
-            System.err.println("Error writing settings file: " + e.getMessage());
+            System.err.println("[!!!] Error writing settings file: " + e.getMessage());
         }
     }
 
-    public void render() {
+    public static void render() {
+        //System.out.println("Rendering");
         threadsDone = 0;
         pixDone = 0;
         img = new BufferedImage(imageSize, imageSize, BufferedImage.TYPE_INT_RGB);
-        subGraphSize = graphSize / threads;
         double subImageSize = (double) imageSize / threads;
         for (int x = 0; x < threads; x++) {
             startPoint = (int) (x * subImageSize);
@@ -336,252 +325,115 @@ public class MandelbrotGenerator implements Runnable {
     public int getPixDone() {
         return (pixDone);
     }
-
-    public static void main(String[] args) throws IOException {
-        CLI = true;
-        Scanner scan = new Scanner(System.in);
-        DataInputStream dis;
-        DataOutputStream dos;
-        String input = "";
-        Boolean inMainMenu = true;
-
-        loadSettings();
-
-        System.out.println("Mandelbrot Generator - by Harsh Noise");
-        while (inMainMenu) {
-
-            System.out.println("Would you like to [R]ender, visit [S]ettings, or [E]xit?");
-            input = scan.nextLine();
-            switch (input) {
-                case "R":
-                case "r":
-                    System.out.println("Starting render.");
-                    System.out.println("|------------------------------------------------|");
-                    threadsDone = 0;
-                    pixDone = 0;
-                    img = new BufferedImage(imageSize, imageSize, BufferedImage.TYPE_INT_RGB);
-                    subGraphSize = graphSize / threads;
-                    double subImageSize = (double) imageSize / threads;
-                    for (int x = 0; x < threads; x++) {
-                        startPoint = (int) (x * subImageSize);
-                        endPoint = (int) ((x + 1) * subImageSize);
-                        if (imageSize - endPoint < subImageSize) {
-                            endPoint = imageSize;
-                        }
-                        //System.out.println(startPoint + ", " + endPoint);
-
-                        Thread object = new Thread(new MandelbrotGenerator());
-                        object.start();
-
-                        try {
-                            Thread.sleep(10);
-                        } catch (InterruptedException e) {
-                            // TODO Auto-generated catch block
-                            e.printStackTrace();
-                        }
-                    }
-                    //System.out.println("Waiting for threads to finish");
-                    while (threadsDone != threads) {
-
-                        try {
-                            //System.out.println(threadsDone);
-                            //System.out.println(pixDone / ((double) imageSize * imageSize));
-                            Thread.sleep(1000);
-                        } catch (InterruptedException e) {
-                            // TODO Auto-generated catch block
-                            e.printStackTrace();
-                        }
-                    }
-                    //System.out.println("Threads finished");
-                    //Number Writer
-                    NumberWriter writer = new NumberWriter();
-                    img = writer.write(img, String.valueOf(shiftX) + ", " + String.valueOf(shiftY) + ", " + String.valueOf(graphSize));
-
-                    //Output file 
-                    File outputfile = new File(fileName + ".png");
-                    try {
-                        ImageIO.write(img, "png", outputfile);
-                    } catch (IOException e) {
-
-                    }
-                    System.out.println("\nFile saved to " + outputfile.getAbsolutePath());
-                    break;
-                case "S":
-                case "s":
-
-                    System.out.println("Current settings:");
-                    System.out.println("[S] Side length of the graph (units): " + graphSize + "\n"
-                            + "[R] Resolution of the image (pixels): " + imageSize + "\n"
-                            + "[X] Image centered on XCoord: " + shiftX + "\n"
-                            + "[Y] Image centered on YCoord: " + shiftY + "\n"
-                            + "[C] Color mode (B&W = 0, Full = 1, ROYGBIV = 2): " + colorMode + "\n"
-                            + "[F] Color contrast: " + reductionFactor + "\n"
-                            + "[D] Max calculation depth (-1 for color status's default): " + maxDepth + "\n"
-                            + "[T] Number of threads in use: " + threads + "\n"
-                            + "[N] Export file name: " + fileName + "\n"
-                            + "[U] Reprint settings table\n"
-                            + "[E] Exit");
-                    boolean inSettingsMenu = true;
-                    while (inSettingsMenu) {
-                        System.out.println("Type the setting code you wish to edit.");
-                        input = scan.nextLine();
-                        switch (input) {
-                            case "S":
-                            case "s":
-                                try {
-                                    System.out.println("Enter a new value");
-                                    graphSize = scan.nextDouble();
-                                    scan.nextLine();
-                                } catch (InputMismatchException e) {
-                                    System.out.println("[???] Incorect data type for " + ((Object) graphSize).getClass().getName());
-                                    scan.nextLine();
-                                }
-                                break;
-                            case "R":
-                            case "r":
-                                try {
-                                    System.out.println("Enter a new value");
-                                    imageSize = scan.nextInt();
-                                    scan.nextLine();
-                                } catch (InputMismatchException e) {
-                                    System.out.println("[???] Incorect data type for " + ((Object) imageSize).getClass().getName());
-                                    scan.nextLine();
-                                }
-                                break;
-                            case "X":
-                            case "x":
-                                try {
-                                    System.out.println("Enter a new value");
-                                    shiftX = scan.nextDouble();
-                                    scan.nextLine();
-                                } catch (InputMismatchException e) {
-                                    System.out.println("[???] Incorect data type for " + ((Object) shiftX).getClass().getName());
-                                    scan.nextLine();
-                                }
-                                break;
-                            case "Y":
-                            case "y":
-                                try {
-                                    System.out.println("Enter a new value");
-                                    shiftY = scan.nextDouble();
-                                    scan.nextLine();
-                                } catch (InputMismatchException e) {
-                                    System.out.println("[???] Incorect data type for " + ((Object) shiftY).getClass().getName());
-                                    scan.nextLine();
-                                }
-                                break;
-                            case "C":
-                            case "c":
-                                try {
-                                    System.out.println("Enter a new value");
-                                    colorMode = scan.nextInt();
-                                    if (colorMode == 0 && maxDepth > 256) {
-                                        maxDepth = 256;
-                                        System.out.println("[!!!] Max depth is set too high for this color mode, changed to 256.");
-                                    }
-                                    scan.nextLine();
-                                } catch (InputMismatchException e) {
-                                    System.out.println("[???] Incorect data type for " + ((Object) colorMode).getClass().getName());
-                                    scan.nextLine();
-                                }
-                                break;
-                            case "F":
-                            case "f":
-                                try {
-                                    System.out.println("Enter a new value");
-                                    reductionFactor = scan.nextDouble();
-                                    scan.nextLine();
-                                } catch (InputMismatchException e) {
-                                    System.out.println("[???] Incorect data type for " + ((Object) reductionFactor).getClass().getName());
-                                    scan.nextLine();
-                                }
-                                break;
-                            case "D":
-                            case "d":
-                                try {
-                                    System.out.println("Enter a new value");
-                                    maxDepth = scan.nextInt();
-
-                                    if (maxDepth == -1) {
-                                        switch (colorMode) {
-                                            case 0:
-                                                maxDepth = 256;
-                                                System.out.println("Depth defaulted to 256");
-                                                break;
-                                            case 1:
-                                                maxDepth = (int) Math.pow(256, 3);
-                                                System.out.println("Depth defaulted to " + (int) Math.pow(256, 3));
-                                                System.out.println("[!!!] Warning: this will run through all possible 8 bit colors and may take a long time. It is advised you set a smaller depth limit.");
-                                                break;
-                                            case 2:
-                                                maxDepth = (int) Math.pow(256, 3);
-                                                System.out.println("Depth defaulted to " + (int) Math.pow(256, 3));
-                                                System.out.println("ROYGBIV mode will infinitely loop through the rainbow, and has no maximum depth.");
-                                                break;
-                                        }
-                                    }
-                                    scan.nextLine();
-                                } catch (InputMismatchException e) {
-                                    System.out.println("[???] Incorect data type for " + ((Object) maxDepth).getClass().getName());
-                                    scan.nextLine();
-                                }
-                                break;
-                            case "T":
-                            case "t":
-                                try {
-                                    System.out.println("Enter a new value");
-                                    threads = scan.nextInt();
-                                    scan.nextLine();
-                                } catch (InputMismatchException e) {
-                                    System.out.println("[???] Incorect data type for " + ((Object) threads).getClass().getName());
-                                    scan.nextLine();
-                                }
-                                break;
-                            case "N":
-                            case "n":
-                                try {
-                                    System.out.println("Enter a new value");
-                                    fileName = scan.nextLine();
-                                } catch (InputMismatchException e) {
-                                    System.out.println("[???] Incorect data type for " + ((Object) fileName).getClass().getName());
-                                }
-                                break;
-                            case "U":
-                            case "u":
-                                System.out.println("Current settings:");
-                                System.out.println("[S] Side length of the graph (units): " + graphSize + "\n"
-                                        + "[R] Resolution of the image (pixels): " + imageSize + "\n"
-                                        + "[X] Image centered on XCoord: " + shiftX + "\n"
-                                        + "[Y] Image centered on YCoord: " + shiftY + "\n"
-                                        + "[C] Color mode (B&W = 0, Full = 1, ROYGBIV = 2): " + colorMode + "\n"
-                                        + "[F] Color contrast: " + reductionFactor + "\n"
-                                        + "[D] Max calculation depth (-1 for color status's default): " + maxDepth + "\n"
-                                        + "[T] Number of threads in use: " + threads + "\n"
-                                        + "[N] Export file name: " + fileName + "\n"
-                                        + "[U] Reprint settings table\n"
-                                        + "[E] Exit");
-                                break;
-                            case "E":
-                            case "e":
-                                inSettingsMenu = false;
-                                break;
-                            default:
-                                System.out.println("You entered '" + input + "', accepted values are 'S', 'R', 'X', 'Y', 'C', 'F', 'T', 'N', 'U', or 'E'");
-                                break;
-                        }
-                    }
-                    saveSettings();
-                    break;
-                case "E":
-                case "e":
-                    inMainMenu = false;
-                    break;
-                default:
-                    System.out.println("You entered '" + input + "', accepted values are 'R', 'S', or 'E'");
-                    break;
-
+    
+    public static void printHelp(){
+        System.out.println("""
+                           Usage:
+                           \tMandelbrotGeneratorCLI [mode] [setting] [value] [setting] [value]...
+                           \tExample: 'MandelbrotGeneratorCLI Render -S 0.5 -Y 1.0 -N HarshBrot
+                           Mode:
+                           \tRender\tLoads the default values of the mandelbrot generator, applies you updated settings, and processes a render job
+                           \tLoad\tLoads the settings from a mandelbrotgeneratorsettings.dat file, applies your updated settings, and processes a render job
+                           \tSave\tLoads the default settings, applies your updated settings, and generates a mandelbrotgeneratorsettings.dat file
+                           
+                           Setting:
+                           \t-S\tThe side length of the graph, used for zooming the image in and out. (Decimal - Default 2.5) 
+                           \t-R\tThe resolution of the resulting image, the number of pixels per side. (Integer - Default 1000) 
+                           \t-X\tThe X coordinates of the center of the image. (Decimal - Default -0.75) 
+                           \t-Y\tThe Y coordinates of the center of the image. (Decimal - Default 0.0) 
+                           \t-C\tThe mode which the mandelbrot set is colored. Black & white = 0, All colors = 1, Rainbow = 2. (Integer - Default 0) 
+                           \t-F\tThe color contrast between different depths of the mandelbrot (Decimal - Default 1.0)
+                           \t-D\tThe maximum calculation depth.(Integer - Default varies by color mode. Set to -1 for the color mode's default.) 
+                           \t-T\tThe number of threads used for calculation. (Integer - Default 4) 
+                           \t-N\tThe name of the exported image file. (String - Default myMandelbrot) """);
+    }
+    
+    public static boolean setSettingsValues(String[] args){
+        int x = 1;
+        try{
+            for(x = 1; x < args.length; x+=2){
+                switch(args[x].toLowerCase()){
+                    case "-s":
+                        graphSize = Double.parseDouble(args[x+1]);
+                        break;
+                    case "-r":
+                        imageSize = Integer.parseInt(args[x+1]);
+                        break;
+                    case "-x":
+                        shiftX = Double.parseDouble(args[x+1]);
+                        break;
+                    case "-y":
+                        shiftY = Double.parseDouble(args[x+1]);
+                        break;
+                    case "-c":
+                        colorMode = Integer.parseInt(args[x+1]);
+                        break;
+                    case "-f":
+                        reductionFactor = Double.parseDouble(args[x+1]);
+                        break;
+                    case "-d":
+                        maxDepth = Integer.parseInt(args[x+1]);
+                        break;
+                    case "-t":
+                        threads = Integer.parseInt(args[x+1]);
+                        break;
+                    case "-n":
+                        fileName = args[x+1];
+                        break;
+                    default:
+                        System.out.println("[???] Setting '" + args[x].toLowerCase() + "' not recognized as a valid setting. Type 'MandelbrotGeneratorCLI help' to see a list of all valid settings. Make sure to type them exactly as seen. Aborting render.");
+                        return(false);
+                }
             }
+            return(true);
+        }catch(NumberFormatException e){
+            System.out.println("[???] " + args[x+1] + " is not able to be converted to the proper variable type for " + args[x].toLowerCase() + ". Type 'MandelbrotGeneratorCLI help' to see a list of all valid settings and their associated variable type. Aborting render.");
+            return(false);
+        }catch(ArrayIndexOutOfBoundsException e){
+            System.out.println("[???] Settings-value mismatch. Make sure there is exactly one value for every setting. Type 'MandelbrotGeneratorCLI help' to see a list of all valid settings and their associated variable type. Aborting render.");
+            return(false);
         }
-        scan.close();
+    }
+                           
+    public static void main(String[] args) throws IOException {
+        try{
+            CLI = true;
+            System.out.println("Mandelbrot Generator - A project by Harsh Noise.\nA tool for rendering images of the mandelbrot set on your device.\n");
+            if(args.length == 0){
+                System.out.println("[???] No arguments detected. At least one argument is required. Type 'MandelbrotGeneratorGUI help' to see a list of all options. Aborting render.");
+            }else{
+                switch(args[0].toLowerCase()){
+                    case "help":
+                        printHelp();
+                        break;
+                    case "render":
+                        if(setSettingsValues(args)){
+                            System.out.println("Starting render.");
+                            System.out.println("|------------------------------------------------|");
+                            render();
+                        }
+                        break;
+                    case "load":
+                        loadSettings();
+                        if(setSettingsValues(args)){
+                            System.out.println("Starting render.");
+                            System.out.println("|------------------------------------------------|");
+                            render();
+                        }
+                        break;
+                    case "save":
+                        if(setSettingsValues(args)){
+                            saveSettings();
+                        }
+                        break;
+                    default:
+                        System.out.println("[???] Mode '" + args[0].toLowerCase() + "' not recognized as a valid mode. Type 'MandelbrotGeneratorCLI help' to see a list of all valid modes. Make sure to type them exactly as seen. Aborting render.");
+                }
+            }
+        }catch(Exception e){
+            System.out.print("[!!!] An unexpected exception has occured. Send Harsh Noise a copy of this stack trace and tell him it's borked!\n");
+            System.out.print(e);
+            e.printStackTrace();
+        }
     }
 }
