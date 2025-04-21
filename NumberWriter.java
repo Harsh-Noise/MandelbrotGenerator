@@ -25,7 +25,6 @@ public class NumberWriter {
 	}
 	
 	public BufferedImage write(BufferedImage image, String text){
-            boolean[][] number;
             int pointer = 0;
             int layer = 0;
             //Check once to make sure there is room for the label, and return an unlabled image otherwise.
@@ -43,6 +42,8 @@ public class NumberWriter {
             }
             
             //Get each character array and place it in the correct spot.
+            pointer = 0;
+            layer = 0;
 	    for(int x = 0; x < text.length(); x++) {
 	    	if((pointer + 1)*5 > image.getWidth()) {
                     if((layer + 2)*7 > image.getHeight()){
