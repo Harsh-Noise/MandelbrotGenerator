@@ -11,7 +11,6 @@ import java.io.IOException;
 import javax.imageio.ImageIO;
 
 interface ProgressListener {
-
     void onProgressUpdate(int progress); // Interface to send progress updates
 }
 
@@ -30,7 +29,10 @@ public class MandelbrotGenerator implements Runnable {
     //Color settings b&w = 0, full = 1, roygbiv = 2
     static double reductionFactor = 1;
     static int colorMode = 0;
-    static int maxDepth = 256;
+    static int maxDepth = 255;
+    
+    //Whether ot not to write a label on the image
+    static boolean numberWriter = true;
 
     //Images per side (Square root of the number of threads started)
     static int threads = 4;
@@ -46,6 +48,7 @@ public class MandelbrotGenerator implements Runnable {
     //Counters for threads
     static volatile int threadsDone = 0;
     static volatile int pixDone = 0;
+    static volatile double loadBarChunks = 0.0;
 
     //shared buffered image
     static volatile BufferedImage img;
@@ -73,22 +76,39 @@ public class MandelbrotGenerator implements Runnable {
 
     public static Color getColor(Complex c) {
         //Takes a complex number, and converts the 'getStability' function into a Color object depending on the colormode
-        int color;
+        int color = 0;
         switch (colorMode) {
             case 0:
-                color = getStability(c, maxDepth);
-                if (color >= 256) {
-                    color = 255;
+                //Black and white
+                if(maxDepth > 255){
+                    maxDepth = 255;
+                    System.out.println("[???] Max depth out of range for this color mode. Defaulting to 255. Resuming render.");
                 }
+                
+                color = getStability(c, maxDepth);
+                    
                 color = 255 - color;
                 return (new Color(color, color, color));
             case 1:
+                //Full
+                
                 color = getStability(c, maxDepth);
 
                 return (new Color(color));
             case 2:
+                //Hue
                 color = getStability(c, maxDepth);
                 return (new Color(Color.getHSBColor(((float) color / 256), (float) 1, (float) 1).getRGB()));
+            case 3:
+                //Black and white inv
+                if(maxDepth > 255){
+                    maxDepth = 255;
+                    System.out.println("[???] Max depth out of range for this color mode. Defaulting to 255. Resuming render.");
+                }
+                                
+                color = getStability(c, maxDepth);
+
+                return (new Color(color, color, color));
             default:
                 return (new Color(0, 0, 0));
         }
@@ -124,17 +144,9 @@ public class MandelbrotGenerator implements Runnable {
     }
 
     public static void buildBrot(int startPix, int endPix) {
-        //System.out.println("Building " + startPix + ", " + endPix);
-
         //loop for every pixel in the img
+        double loadBarChunk = (50.0/(imageSize*imageSize));
         for (int x = startPix; x < endPix; x++) {
-            //loading bar
-            if(CLI){
-                if(x%(imageSize/50) == 0) {
-                    System.out.print('#');
-                }
-            }
-            
             for (int y = 0; y < imageSize; y++) {
                 //get complex number represented by the pixel on the img
                 Complex c = new Complex(pxToNumX(x, graphSize, imageSize, shiftX), pxToNumY(y, graphSize, imageSize, shiftY));
@@ -143,6 +155,10 @@ public class MandelbrotGenerator implements Runnable {
                 img.setRGB(x, y, getColor(c).getRGB());
                 
                 pixDone += 1;
+                //loading bar
+                if(CLI){
+                    loadBarChunks += loadBarChunk;
+                }
             }
         }
     }
@@ -194,6 +210,8 @@ public class MandelbrotGenerator implements Runnable {
         pixDone = 0;
         img = new BufferedImage(imageSize, imageSize, BufferedImage.TYPE_INT_RGB);
         double subImageSize = (double) imageSize / threads;
+        
+        //Loop for starting threads
         for (int x = 0; x < threads; x++) {
             startPoint = (int) (x * subImageSize);
             endPoint = (int) ((x + 1) * subImageSize);
@@ -204,36 +222,46 @@ public class MandelbrotGenerator implements Runnable {
 
             Thread object = new Thread(new MandelbrotGenerator());
             object.start();
-
+            //Small delay such that threads have time to update shared resources 
             try {
                 Thread.sleep(10);
             } catch (InterruptedException e) {
-                // TODO Auto-generated catch block
+                System.out.println("[!!!] An unexpected exception has occured while starting threads. Send Harsh Noise a copy of this stack trace and tell him it's borked!\n");
+                System.out.print(e);
                 e.printStackTrace();
             }
         }
-        //System.out.println("Waiting for threads to finish");
-        while (threadsDone != threads) {
-
+        //Loop while threads are working
+        System.out.println("Starting render.");
+        System.out.println("|---------------Estimated-Progress---------------|");
+        do {
             try {
-                //System.out.println(threadsDone);
-                //System.out.println(pixDone / ((double) imageSize * imageSize));
-
+                Thread.sleep(10);
+                
                 if (listener != null) {
                     listener.onProgressUpdate(getP()); // Notify progress
                 }
+                
+                if(CLI){
+                    while(loadBarChunks >= 1){
+                        System.out.print('#');
+                        loadBarChunks -= 1;
+                    }
 
-                Thread.sleep(10);
+                }
+
             } catch (InterruptedException e) {
-                // TODO Auto-generated catch block
+                System.out.println("[!!!] An unexpected exception has occured while waiting on the threads. Send Harsh Noise a copy of this stack trace and tell him it's borked!\n");
+                System.out.print(e);
                 e.printStackTrace();
             }
-        }
+        } while (threadsDone != threads);
         //System.out.println("Threads finished");
         //Number Writer
-        NumberWriter writer = new NumberWriter();
-        img = writer.write(img, String.valueOf(shiftX) + ", " + String.valueOf(shiftY) + ", " + String.valueOf(graphSize));
-
+        if(numberWriter){
+            NumberWriter writer = new NumberWriter();
+            img = writer.write(img, String.valueOf(shiftX) + ", " + String.valueOf(shiftY) + ", " + String.valueOf(graphSize));
+        }
         //Output file 
         File outputfile = new File(fileName + ".png");
         try {
@@ -341,11 +369,18 @@ public class MandelbrotGenerator implements Runnable {
                            \t-R\tThe resolution of the resulting image, the number of pixels per side. (Integer - Default 1000) 
                            \t-X\tThe X coordinates of the center of the image. (Decimal - Default -0.75) 
                            \t-Y\tThe Y coordinates of the center of the image. (Decimal - Default 0.0) 
-                           \t-C\tThe mode which the mandelbrot set is colored. Black & white = 0, All colors = 1, Rainbow = 2. (Integer - Default 0) 
                            \t-F\tThe color contrast between different depths of the mandelbrot (Decimal - Default 1.0)
-                           \t-D\tThe maximum calculation depth.(Integer - Default varies by color mode. Set to -1 for the color mode's default.) 
+                           \t-D\tThe maximum calculation depth for each pixel. See color modes for limitations. (Integer - Default 255) 
                            \t-T\tThe number of threads used for calculation. (Integer - Default 4) 
-                           \t-N\tThe name of the exported image file. (String - Default myMandelbrot) """);
+                           \t-L\tWhether or not to print the x, y, and zoom at the top left corner. (Boolean - default true)
+                           \t-N\tThe name of the exported image file. (String - Default myMandelbrot) 
+                           \t-C\tThe mode which the mandelbrot set is colored. See below for details. (Integer - Default 0) 
+                           
+                           Color modes:
+                           \t0\tBlack mandelbrot on a white background. (Max calculation depth - 255)
+                           \t1\tCycles though all possible RGB values. (Max calculation depth - 16,581,375)
+                           \t2\tRainbow coloring that infinitely cycles through hue. (Max calculation depth - infinite)
+                           \t3\t0's coloring inverted. (Max calculation depth - 255)""");
     }
     
     public static boolean setSettingsValues(String[] args){
@@ -380,6 +415,9 @@ public class MandelbrotGenerator implements Runnable {
                     case "-n":
                         fileName = args[x+1];
                         break;
+                    case "-l":
+                        numberWriter = Boolean.parseBoolean(args[x+1]);
+                        break;
                     default:
                         System.out.println("[???] Setting '" + args[x].toLowerCase() + "' not recognized as a valid setting. Type 'MandelbrotGeneratorCLI help' to see a list of all valid settings. Make sure to type them exactly as seen. Aborting render.");
                         return(false);
@@ -408,16 +446,12 @@ public class MandelbrotGenerator implements Runnable {
                         break;
                     case "render":
                         if(setSettingsValues(args)){
-                            System.out.println("Starting render.");
-                            System.out.println("|------------------------------------------------|");
                             render();
                         }
                         break;
                     case "load":
                         loadSettings();
                         if(setSettingsValues(args)){
-                            System.out.println("Starting render.");
-                            System.out.println("|------------------------------------------------|");
                             render();
                         }
                         break;
