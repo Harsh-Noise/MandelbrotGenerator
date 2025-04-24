@@ -68,6 +68,10 @@ public class MandelbrotGenerator implements Runnable {
     public void setProgressListener(ProgressListener listener) {
         this.listener = listener;
     }
+    
+    public int getPixDone() {
+        return (pixDone);
+    }
 
     public static Complex iterate(Complex z, Complex c) {
         //This method controls the formula used. This one is specific to the mandelbrot set.
@@ -76,13 +80,13 @@ public class MandelbrotGenerator implements Runnable {
 
     public static Color getColor(Complex c) {
         //Takes a complex number, and converts the 'getStability' function into a Color object depending on the colormode
-        int color = 0;
+        int color;
         switch (colorMode) {
             case 0:
                 //Black and white
                 if(maxDepth > 255){
                     maxDepth = 255;
-                    System.out.println("[???] Max depth out of range for this color mode. Defaulting to 255. Resuming render.");
+                    System.out.println("[???] Max depth out of range for this color mode. Setting calculation depth to 255. Resuming render.");
                 }
                 
                 color = getStability(c, maxDepth);
@@ -91,7 +95,11 @@ public class MandelbrotGenerator implements Runnable {
                 return (new Color(color, color, color));
             case 1:
                 //Full
-                
+                if(maxDepth > 16581375){
+                    maxDepth = 16581375;
+                    System.out.println("[???] Max depth out of range for this color mode. Setting calculation depth to 16,581,375. Resuming render.");
+                    System.out.println("[¿¿¿] Wtf are you doing?");
+                }
                 color = getStability(c, maxDepth);
 
                 return (new Color(color));
@@ -103,7 +111,7 @@ public class MandelbrotGenerator implements Runnable {
                 //Black and white inv
                 if(maxDepth > 255){
                     maxDepth = 255;
-                    System.out.println("[???] Max depth out of range for this color mode. Defaulting to 255. Resuming render.");
+                    System.out.println("[???] Max depth out of range for this color mode. Setting calculation depth to 255. Resuming render.");
                 }
                                 
                 color = getStability(c, maxDepth);
@@ -167,28 +175,35 @@ public class MandelbrotGenerator implements Runnable {
         File file = new File(settingsFile);
         if (file.exists()) {
             try (DataInputStream dis = new DataInputStream(new FileInputStream(file))) {
-                graphSize = dis.readDouble();
-                imageSize = dis.readInt();
-                shiftX = dis.readDouble();
-                shiftY = dis.readDouble();
-                reductionFactor = dis.readDouble();
-                colorMode = dis.readInt();
-                maxDepth = dis.readInt();
-                threads = dis.readInt();
-                fileName = dis.readUTF();
-                System.out.println("Settings loaded.");
+                if(dis.readUTF().equals("Harsh was here")){
+                    graphSize = dis.readDouble();
+                    imageSize = dis.readInt();
+                    shiftX = dis.readDouble();
+                    shiftY = dis.readDouble();
+                    reductionFactor = dis.readDouble();
+                    colorMode = dis.readInt();
+                    maxDepth = dis.readInt();
+                    threads = dis.readInt();
+                    fileName = dis.readUTF();
+                    numberWriter = dis.readBoolean();
+                    System.out.println("Settings loaded.");
+                }else{
+                    System.out.println("[???] Settings file is corrupted. Initialized with default values.");
+                }
             } catch (IOException e) {
-                System.err.println("[!!!] Error reading settings file: " + e.getMessage());
+                System.out.println("[!!!] Error reading settings file.");
+                System.out.println(e);
+                e.printStackTrace();
             }
         } else {
             // File does not exist, so initialize with default data
             System.out.println("[???] Settings file not found. Initialized with default values.");
-            saveSettings();
         }
     }
 
     public static void saveSettings() {
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(settingsFile))) {
+            dos.writeUTF("Harsh was here");
             dos.writeDouble(graphSize);
             dos.writeInt(imageSize);
             dos.writeDouble(shiftX);
@@ -198,28 +213,29 @@ public class MandelbrotGenerator implements Runnable {
             dos.writeInt(maxDepth);
             dos.writeInt(threads);
             dos.writeUTF(fileName);
+            dos.writeBoolean(numberWriter);
             System.out.println("Settings saved.");
         } catch (IOException e) {
-            System.err.println("[!!!] Error writing settings file: " + e.getMessage());
+            System.out.println("[!!!] Error writing settings file.");
+            System.out.println(e);
+            e.printStackTrace();
         }
     }
 
     public static void render() {
-        //System.out.println("Rendering");
         threadsDone = 0;
         pixDone = 0;
         img = new BufferedImage(imageSize, imageSize, BufferedImage.TYPE_INT_RGB);
         double subImageSize = (double) imageSize / threads;
         
         //Loop for starting threads
+        System.out.println("Starting " + threads + " threads");
         for (int x = 0; x < threads; x++) {
             startPoint = (int) (x * subImageSize);
             endPoint = (int) ((x + 1) * subImageSize);
             if (imageSize - endPoint < subImageSize) {
                 endPoint = imageSize;
             }
-            //System.out.println(startPoint + ", " + endPoint);
-
             Thread object = new Thread(new MandelbrotGenerator());
             object.start();
             //Small delay such that threads have time to update shared resources 
@@ -227,49 +243,51 @@ public class MandelbrotGenerator implements Runnable {
                 Thread.sleep(10);
             } catch (InterruptedException e) {
                 System.out.println("[!!!] An unexpected exception has occured while starting threads. Send Harsh Noise a copy of this stack trace and tell him it's borked!\n");
-                System.out.print(e);
+                System.out.println(e);
                 e.printStackTrace();
             }
         }
+        
         //Loop while threads are working
-        System.out.println("Starting render.");
-        System.out.println("|---------------Estimated-Progress---------------|");
+        if(CLI){
+            System.out.println("Starting render.");
+            System.out.println("|---------------Estimated-Progress---------------|");
+        }
         do {
             try {
                 Thread.sleep(10);
-                
                 if (listener != null) {
                     listener.onProgressUpdate(getP()); // Notify progress
                 }
-                
                 if(CLI){
                     while(loadBarChunks >= 1){
                         System.out.print('#');
                         loadBarChunks -= 1;
                     }
-
                 }
-
             } catch (InterruptedException e) {
                 System.out.println("[!!!] An unexpected exception has occured while waiting on the threads. Send Harsh Noise a copy of this stack trace and tell him it's borked!\n");
                 System.out.print(e);
                 e.printStackTrace();
             }
         } while (threadsDone != threads);
-        //System.out.println("Threads finished");
+
         //Number Writer
         if(numberWriter){
             NumberWriter writer = new NumberWriter();
             img = writer.write(img, String.valueOf(shiftX) + ", " + String.valueOf(shiftY) + ", " + String.valueOf(graphSize));
         }
-        //Output file 
+        
+        //Output image file 
         File outputfile = new File(fileName + ".png");
         try {
             ImageIO.write(img, "png", outputfile);
+            if(CLI){
+                System.out.println("\nFile saved to " + outputfile.getAbsolutePath());
+            }
         } catch (IOException e) {
 
         }
-        System.out.println("\nFile saved to " + outputfile.getAbsolutePath());
     }
 
     @Override
@@ -277,81 +295,67 @@ public class MandelbrotGenerator implements Runnable {
         buildBrot(startPoint, endPoint);
         threadsDone++;
     }
-
+    
+    //Getters and setters used by the GUI in the future
     public void setgraphSize(double x) {
-        graphSize = x;
+       graphSize = x;
     }
-
     public double getgraphSize() {
         return (graphSize);
     }
-
     public void setimageSize(int x) {
-        imageSize = x;
+       imageSize = x;
     }
-
     public int getimageSize() {
         return (imageSize);
     }
-
     public void setshiftX(double x) {
-        shiftX = x;
+       shiftX = x;
     }
-
     public double getshiftX() {
         return (shiftX);
     }
-
     public void setshiftY(double x) {
-        shiftY = x;
+       shiftY = x;
     }
-
     public double getshiftY() {
         return (shiftY);
     }
-
     public void setreductionFactor(double x) {
-        reductionFactor = x;
+       reductionFactor = x;
     }
-
     public double getreductionFactor() {
         return (reductionFactor);
     }
-
     public void setcolorMode(int x) {
-        colorMode = x;
+       colorMode = x;
     }
-
     public int getcolorMode() {
         return (colorMode);
     }
-
     public void setmaxDepth(int x) {
-        maxDepth = x;
+       maxDepth = x;
     }
-
     public int getmaxDepth() {
         return (maxDepth);
     }
-
-    public void setthreads(int x) {
-        threads = x;
+    public void setnumberWriter(boolean x) {
+       numberWriter = x;
     }
-
+    public boolean getnumberWriter() {
+        return (numberWriter);
+    }
+    public void setthreads(int x) {
+       threads = x;
+    }
     public int getthreads() {
         return (threads);
     }
-
     public void setfileName(String x) {
-        fileName = x;
+       fileName = x;
     }
-
     public String getfileName() {
         return (fileName);
-    }
-
-    public int getPixDone() {
-        return (pixDone);
     }
     
     public static void printHelp(){
@@ -433,7 +437,7 @@ public class MandelbrotGenerator implements Runnable {
         }
     }
                            
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args){
         try{
             CLI = true;
             System.out.println("Mandelbrot Generator - A project by Harsh Noise.\nA tool for rendering images of the mandelbrot set on your device.\n");
@@ -465,8 +469,8 @@ public class MandelbrotGenerator implements Runnable {
                 }
             }
         }catch(Exception e){
-            System.out.print("[!!!] An unexpected exception has occured. Send Harsh Noise a copy of this stack trace and tell him it's borked!\n");
-            System.out.print(e);
+            System.out.println("[!!!] An unexpected exception has occured. Send Harsh Noise a copy of this stack trace and tell him it's borked!");
+            System.out.println(e);
             e.printStackTrace();
         }
     }
