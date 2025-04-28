@@ -26,17 +26,21 @@ public class MandelbrotGenerator implements Runnable {
     static double shiftX = -0.75;
     static double shiftY = 0;
 
-    //Color settings b&w = 0, full = 1, roygbiv = 2
+    //alters the color contrast by reducing/increasing color change per depth
     static double reductionFactor = 1;
+
+    //Color settings b&w = 0, full = 1, roygbiv = 2
     static int colorMode = 0;
+
+    //max calculation iterations
     static int maxDepth = 255;
-    
+
+    //Number of threads in use
+    static int threads = 1;
+
     //Whether ot not to write a label on the image
     static boolean numberWriter = true;
-
-    //Images per side (Square root of the number of threads started)
-    static int threads = 4;
-
+    
     //fileName
     static String fileName = "myMandelbrot";
 
@@ -147,7 +151,7 @@ public class MandelbrotGenerator implements Runnable {
         return ((((double) graphSize / imageSize) * px) - (graphSize / 2) + shiftX);
     }
     
-    public static int getP(){
+    public static int getPercentDone(){
         return((int)(((double)pixDone/(imageSize*imageSize))*100));
     }
 
@@ -253,15 +257,17 @@ public class MandelbrotGenerator implements Runnable {
             System.out.println("Starting render.");
             System.out.println("|---------------Estimated-Progress---------------|");
         }
+        int CLIBar = 0;
         do {
             try {
                 Thread.sleep(10);
                 if (listener != null) {
-                    listener.onProgressUpdate(getP()); // Notify progress
+                    listener.onProgressUpdate(getPercentDone()); // Notify progress
                 }
                 if(CLI){
-                    while(loadBarChunks >= 1){
+                    while(loadBarChunks >= 1 && CLIBar < 50){ //make sure the bar doesn't go over 50 units;
                         System.out.print('#');
+                        CLIBar++;
                         loadBarChunks -= 1;
                     }
                 }
@@ -271,7 +277,12 @@ public class MandelbrotGenerator implements Runnable {
                 e.printStackTrace();
             }
         } while (threadsDone != threads);
-
+        
+        while(CLIBar < 50){ //Make sure the bar isn't short of 50
+            System.out.print('#');
+            CLIBar++;
+        }
+        
         //Number Writer
         if(numberWriter){
             NumberWriter writer = new NumberWriter();
@@ -297,64 +308,64 @@ public class MandelbrotGenerator implements Runnable {
     }
     
     //Getters and setters used by the GUI in the future
-    public void setgraphSize(double x) {
+    public void setGraphSize(double x) {
        graphSize = x;
     }
-    public double getgraphSize() {
+    public double getGraphSize() {
         return (graphSize);
     }
-    public void setimageSize(int x) {
+    public void setImageSize(int x) {
        imageSize = x;
     }
-    public int getimageSize() {
+    public int getImageSize() {
         return (imageSize);
     }
-    public void setshiftX(double x) {
+    public void setShiftX(double x) {
        shiftX = x;
     }
-    public double getshiftX() {
+    public double getShiftX() {
         return (shiftX);
     }
-    public void setshiftY(double x) {
+    public void setShiftY(double x) {
        shiftY = x;
     }
-    public double getshiftY() {
+    public double getShiftY() {
         return (shiftY);
     }
-    public void setreductionFactor(double x) {
+    public void setReductionFactor(double x) {
        reductionFactor = x;
     }
-    public double getreductionFactor() {
+    public double getReductionFactor() {
         return (reductionFactor);
     }
-    public void setcolorMode(int x) {
+    public void setColorMode(int x) {
        colorMode = x;
     }
-    public int getcolorMode() {
+    public int getColorMode() {
         return (colorMode);
     }
-    public void setmaxDepth(int x) {
+    public void setMaxDepth(int x) {
        maxDepth = x;
     }
-    public int getmaxDepth() {
+    public int getMaxDepth() {
         return (maxDepth);
     }
-    public void setnumberWriter(boolean x) {
+    public void setNumberWriter(boolean x) {
        numberWriter = x;
     }
-    public boolean getnumberWriter() {
+    public boolean getNumberWriter() {
         return (numberWriter);
     }
-    public void setthreads(int x) {
+    public void setThreads(int x) {
        threads = x;
     }
-    public int getthreads() {
+    public int getThreads() {
         return (threads);
     }
-    public void setfileName(String x) {
+    public void setFileName(String x) {
        fileName = x;
     }
-    public String getfileName() {
+    public String getFileName() {
         return (fileName);
     }
     
@@ -375,7 +386,7 @@ public class MandelbrotGenerator implements Runnable {
                            \t-Y\tThe Y coordinates of the center of the image. (Decimal - Default 0.0) 
                            \t-F\tThe color contrast between different depths of the mandelbrot (Decimal - Default 1.0)
                            \t-D\tThe maximum calculation depth for each pixel. See color modes for limitations. (Integer - Default 255) 
-                           \t-T\tThe number of threads used for calculation. (Integer - Default 4) 
+                           \t-T\tThe number of threads used for calculation. (Integer - Default 1) 
                            \t-L\tWhether or not to print the x, y, and zoom at the top left corner. (Boolean - default true)
                            \t-N\tThe name of the exported image file. (String - Default myMandelbrot) 
                            \t-C\tThe mode which the mandelbrot set is colored. See below for details. (Integer - Default 0) 
