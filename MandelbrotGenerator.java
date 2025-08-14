@@ -230,7 +230,8 @@ public class MandelbrotGenerator implements Runnable {
         threadsDone = 0;
         pixDone = 0;
         img = new BufferedImage(imageSize, imageSize, BufferedImage.TYPE_INT_RGB);
-        double subImageSize = (double) imageSize / threads;
+        //double subImageSize = (double) imageSize / threads;
+        double subImageSize = (double) imageSize / (4*threads); //cover 1/4 the img
         
         //Loop for starting threads
         System.out.println("Starting " + threads + " threads");
@@ -260,7 +261,7 @@ public class MandelbrotGenerator implements Runnable {
         int CLIBar = 0;
         do {
             try {
-                Thread.sleep(10);
+                Thread.sleep(100);
                 if (listener != null) {
                     listener.onProgressUpdate(getPercentDone()); // Notify progress
                 }
@@ -300,11 +301,66 @@ public class MandelbrotGenerator implements Runnable {
 
         }
     }
-
+    
+    //return small thumbnail of the brot given current settings
+    public static BufferedImage getThumbnail(int thumbSize, int depth) {
+        threadsDone = 0;
+        pixDone = 0;
+        img = new BufferedImage(thumbSize, thumbSize, BufferedImage.TYPE_INT_RGB);
+        //double subImageSize = (double) imageSize / threads;
+        double subImageSize = (double) thumbSize / (4*1); //cover 1/4 the img
+        
+        //Loop for starting threads
+        //System.out.println("Starting " + threads + " threads");
+        startPoint = (int) (0);
+        endPoint = (int) (subImageSize);
+        Thread object = new Thread(new MandelbrotGenerator());
+        object.start();
+        //Small delay such that threads have time to update shared resources 
+        try {
+            Thread.sleep(10);
+        } catch (InterruptedException e) {
+            System.out.println("[!!!] An unexpected exception has occured while starting threads. Send Harsh Noise a copy of this stack trace and tell him it's borked!\n");
+            System.out.println(e);
+            e.printStackTrace();
+        }
+        
+        
+        //Loop while threads are working
+        int CLIBar = 0;
+        do {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                System.out.println("[!!!] An unexpected exception has occured while waiting on the threads. Send Harsh Noise a copy of this stack trace and tell him it's borked!\n");
+                System.out.print(e);
+                e.printStackTrace();
+            }
+        } while (threadsDone != threads);
+        
+        //Number Writer
+        if(numberWriter){
+            NumberWriter writer = new NumberWriter();
+            img = writer.write(img, String.valueOf(shiftX) + ", " + String.valueOf(shiftY) + ", " + String.valueOf(graphSize));
+        }
+        
+        return(img);
+    }
+    
+    
+    //static volatile int threadNum = 0;
     @Override
     public void run() {
-        buildBrot(startPoint, endPoint);
+        int threadStart = startPoint;
+        int threadEnd = endPoint;
+        //int thisThread = threadNum;
+        //threadNum++;
+        buildBrot(threadStart, threadEnd);
+        buildBrot(threadStart + (imageSize/4), threadEnd + (imageSize/4));
+        buildBrot(threadStart + 2*(imageSize/4), threadEnd + 2*(imageSize/4));
+        buildBrot(threadStart + 3*(imageSize/4), threadEnd + 3*(imageSize/4));
         threadsDone++;
+        //System.out.println("Thread #" + thisThread + " finished");
     }
     
     //Getters and setters used by the GUI in the future
@@ -450,6 +506,7 @@ public class MandelbrotGenerator implements Runnable {
                            
     public static void main(String[] args){
         try{
+            //args = new String[]{"render", "-t", "16", "-r", "10000"}; //temp
             CLI = true;
             System.out.println("Mandelbrot Generator - A project by Harsh Noise.\nA tool for rendering images of the mandelbrot set on your device.\n");
             if(args.length == 0){
